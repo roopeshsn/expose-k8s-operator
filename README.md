@@ -1,8 +1,8 @@
 # expose-k8s-operator
-// TODO(user): Add simple overview of use/purpose
+The operator will create a deployment, a service, and an ingress resource to expose it on a desired port when an **Expose** resource is created by an administrator.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+The operator’s job is to create a deployment, a service, and an ingress resource to expose it on a desired port when a custom resource is created by an administrator. The idea is the same as the controller built by Mr. Vivek Singh, where he wrote a logic to create a service and ingress resources when a deployment resource is created without using CRD's. Also this operator is bootstrapped with Kubebuilder.
 
 ## Getting Started
 
