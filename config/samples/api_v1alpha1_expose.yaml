@@ -11,12 +11,12 @@ metadata:
 spec:
   name: cr-dsi
   deployment:
-    name: nginx-deployment
-    replicas: 1
-    containers:
-      - name: nginx
-        image: nginx
+    - name: nginx-deployment
+      replicas: 1
+      containers:
+        - name: nginx
+          image: nginx
   service:
-    name: nginx-service
+    - name: nginx-service
   ingress:
-    name: nginx-ingress
+    - name: nginx-ingress

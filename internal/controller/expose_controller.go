@@ -57,17 +57,15 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	fmt.Println(expose)
+	deploymentName := expose.Spec.Deployment[0].Name
+	replicas := expose.Spec.Deployment[0].Replicas
 
-	// deploymentName := expose.Spec.Deployment.Name
-	// replicas := expose.Spec.Deployment.Replicas
+	fmt.Printf("%s, %d", deploymentName, replicas)
 
-	// fmt.Printf("%s, %s", deploymentName, replicas)
-
-	// // Getting container details to create a deployment
-	// for _, container := range expose.Spec.Deployment.Containers {
-	// 	fmt.Printf("%s, %s", container.name, container.image)
-	// }
+	// Getting container details to create a deployment
+	for _, container := range expose.Spec.Deployment[0].Containers {
+		fmt.Printf("%s, %s", container.Name, container.Image)
+	}
 
 	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
 }
