@@ -38,6 +38,7 @@ type ExposeSpec struct {
 type DeploymentSpec struct {
 	Name       string          `json:"name,omitempty"`
 	Replicas   int32           `json:"replicas,omitempty"`
+	Component  string          `json:"component,omitempty"`
 	Containers []ContainerSpec `json:"containers"`
 }
 

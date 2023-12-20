@@ -37,6 +37,8 @@ spec:
               deployment:
                 items:
                   properties:
+                    component:
+                      type: string
                     containers:
                       items:
                         properties:

@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,15 +61,56 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	deploymentName := expose.Spec.Deployment[0].Name
 	replicas := expose.Spec.Deployment[0].Replicas
+	component := expose.Spec.Deployment[0].Component
+	containers := expose.Spec.Deployment[0].Containers
 
-	fmt.Printf("%s, %d", deploymentName, replicas)
-
-	// Getting container details to create a deployment
-	for _, container := range expose.Spec.Deployment[0].Containers {
-		fmt.Printf("%s, %s", container.Name, container.Image)
+	// Print deployment and container information
+	fmt.Printf("Deployment: %s, Replicas: %d \n", deploymentName, replicas)
+	for _, container := range containers {
+		fmt.Printf("Container: %s, Image: %s \n", container.Name, container.Image)
 	}
 
-	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
+	// Create deployment
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName,
+			Namespace: expose.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": component,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": component,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  containers[0].Name,
+							Image: containers[0].Image,
+						},
+					},
+				},
+			},
+		},
+	}
+	fmt.Println("Creating deployment...")
+	err = r.Create(ctx, deployment)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	fmt.Printf("Created deployment %s \n", deployment.Name)
+
+	return ctrl.Result{}, nil
+
+	// Periodic reconcilation
+	// return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -75,4 +118,8 @@ func (r *ExposeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.Expose{}).
 		Complete(r)
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
 }

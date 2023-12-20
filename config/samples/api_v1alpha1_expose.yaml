@@ -13,6 +13,7 @@ spec:
   deployment:
     - name: nginx-deployment
       replicas: 1
+      component: nginx
       containers:
         - name: nginx
           image: nginx

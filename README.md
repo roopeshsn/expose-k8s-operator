@@ -43,6 +43,12 @@ You can apply the samples (examples) from the config/sample:
 
 ```sh
 kubectl apply -k config/samples/
+kubectl apply -f config/samples/api_v1alpha1_expose.yaml
+```
+
+**To delete a custom resource**
+```sh
+kubectl delete Expose expose-sample -n default
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
