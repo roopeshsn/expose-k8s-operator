@@ -44,6 +44,7 @@ type DeploymentSpec struct {
 
 type ServiceSpec struct {
 	Name string `json:"name,omitempty"`
+	Port int32  `json:"port"`
 }
 
 type IngressSpec struct {

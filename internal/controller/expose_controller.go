@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	// "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -63,6 +64,8 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	replicas := expose.Spec.Deployment[0].Replicas
 	component := expose.Spec.Deployment[0].Component
 	containers := expose.Spec.Deployment[0].Containers
+	serviceName := expose.Spec.Service[0].Name
+	port := expose.Spec.Service[0].Port
 
 	// Print deployment and container information
 	fmt.Printf("Deployment: %s, Replicas: %d \n", deploymentName, replicas)
@@ -107,6 +110,36 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	fmt.Printf("Created deployment %s \n", deployment.Name)
 
+	// To get deployment labels
+	// createdDeployment := &appsv1.Deployment{}
+	// err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: expose.Namespace}, createdDeployment)
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
+	// Create Service
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: expose.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: getDeploymentLabels(*deployment),
+			Ports: []corev1.ServicePort{
+				{
+					Name: "http",
+					Port: port,
+				},
+			},
+		},
+	}
+	fmt.Println("Creating service...")
+	err = r.Create(ctx, service)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	fmt.Printf("Created service %s \n", service.Name)
+
 	return ctrl.Result{}, nil
 
 	// Periodic reconcilation
@@ -122,4 +155,8 @@ func (r *ExposeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+func getDeploymentLabels(deployment appsv1.Deployment) map[string]string {
+	return deployment.Spec.Template.Labels
 }

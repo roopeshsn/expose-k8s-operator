@@ -73,6 +73,11 @@ spec:
                   properties:
                     name:
                       type: string
+                    port:
+                      format: int32
+                      type: integer
+                  required:
+                  - port
                   type: object
                 type: array
             required:

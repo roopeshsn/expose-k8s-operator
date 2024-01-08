@@ -19,5 +19,6 @@ spec:
           image: nginx
   service:
     - name: nginx-service
+      port: 80
   ingress:
     - name: nginx-ingress
