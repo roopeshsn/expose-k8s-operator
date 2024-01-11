@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netwv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	// "k8s.io/apimachinery/pkg/types"
@@ -66,6 +67,7 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	containers := expose.Spec.Deployment[0].Containers
 	serviceName := expose.Spec.Service[0].Name
 	port := expose.Spec.Service[0].Port
+	ingressName := expose.Spec.Ingress[0].Name
 
 	// Print deployment and container information
 	fmt.Printf("Deployment: %s, Replicas: %d \n", deploymentName, replicas)
@@ -139,6 +141,48 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 	fmt.Printf("Created service %s \n", service.Name)
+
+	// Create Ingress
+	pathType := "Prefix"
+	ingress := &netwv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ingressName,
+			Namespace: expose.Namespace,
+			Annotations: map[string]string{
+				"nginx.ingress.kubernetes.io/app-root": "/",
+			},
+		},
+		Spec: netwv1.IngressSpec{
+			Rules: []netwv1.IngressRule{
+				netwv1.IngressRule{
+					IngressRuleValue: netwv1.IngressRuleValue{
+						HTTP: &netwv1.HTTPIngressRuleValue{
+							Paths: []netwv1.HTTPIngressPath{
+								netwv1.HTTPIngressPath{
+									Path:     "/nginx",
+									PathType: (*netwv1.PathType)(&pathType),
+									Backend: netwv1.IngressBackend{
+										Service: &netwv1.IngressServiceBackend{
+											Name: service.Name,
+											Port: netwv1.ServiceBackendPort{
+												Number: port,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	fmt.Println("Creating ingress...")
+	err = r.Create(ctx, ingress)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	fmt.Printf("Created ingress %s \n", ingress.Name)
 
 	return ctrl.Result{}, nil
 
