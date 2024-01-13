@@ -69,6 +69,7 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	serviceName := expose.Spec.Service[0].Name
 	port := expose.Spec.Service[0].Port
 	ingressName := expose.Spec.Ingress[0].Name
+	path := expose.Spec.Ingress[0].Path
 
 	finalizerName := "api.core.expose-k8s-operator.io/finalizer"
 
@@ -202,7 +203,7 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 							HTTP: &netwv1.HTTPIngressRuleValue{
 								Paths: []netwv1.HTTPIngressPath{
 									netwv1.HTTPIngressPath{
-										Path:     "/nginx",
+										Path:     path,
 										PathType: (*netwv1.PathType)(&pathType),
 										Backend: netwv1.IngressBackend{
 											Service: &netwv1.IngressServiceBackend{

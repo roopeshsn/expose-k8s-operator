@@ -49,6 +49,7 @@ type ServiceSpec struct {
 
 type IngressSpec struct {
 	Name string `json:"name,omitempty"`
+	Path string `json:"path"`
 }
 
 type ContainerSpec struct {

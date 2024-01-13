@@ -62,6 +62,10 @@ spec:
                   properties:
                     name:
                       type: string
+                    path:
+                      type: string
+                  required:
+                  - path
                   type: object
                 type: array
               name:
