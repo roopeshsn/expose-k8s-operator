@@ -2,7 +2,7 @@
 The operator will create a deployment, a service, and an ingress resource to expose it on a desired port when an **Expose** resource is created by an administrator.
 
 ## Description
-The operator’s job is to create a deployment, a service, and an ingress resource to expose it on a desired port when a custom resource is created by an administrator. The idea is the same as the controller built by Mr. Vivek Singh, where he wrote a logic to create a service and ingress resources when a deployment resource is created without using CRD's. Also this operator is bootstrapped with Kubebuilder.
+The operator’s job is to create a deployment, a service, and an ingress resource to expose it on a desired port when a custom resource is created by an administrator. The idea is the same as the controller built by [Mr. Vivek Singh](https://www.youtube.com/playlist?list=PLh4KH3LtJvRQ43JAwwjvTnsVOMp0WKnJO), where he wrote a logic to create a service and ingress resources when a deployment resource is created without using CRD's. Also this operator is bootstrapped with Kubebuilder.
 
 ## Getting Started
 
@@ -11,6 +11,37 @@ The operator’s job is to create a deployment, a service, and an ingress resour
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+
+### 'Expose' Custom Resource
+
+```
+apiVersion: api.core.expose-k8s-operator.io/v1alpha1
+kind: Expose
+metadata:
+  labels:
+    app.kubernetes.io/name: expose
+    app.kubernetes.io/instance: expose-sample
+    app.kubernetes.io/part-of: expose-k8s-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: expose-k8s-operator
+  name: expose-sample
+spec:
+  name: cr-dsi
+  deployment:
+    - name: nginx-deployment
+      replicas: 1
+      component: nginx
+      containers:
+        - name: nginx
+          image: nginx
+  service:
+    - name: nginx-service
+      port: 80
+  ingress:
+    - name: nginx-ingress
+      path: /nginx
+
+```
 
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
@@ -73,7 +104,7 @@ make undeploy
 ```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+Thanks for taking the time to contribute to `expose-k8s-operator`! You can work on existing issues or propose to work on a new feature.
 
 **NOTE:** Run `make --help` for more information on all potential `make` targets
 
