@@ -63,7 +63,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=<some-registry>/expose-k8s-operator:tag
+make deploy IMG=roopeshsn/expose-k8s-operator:1.0.0-alpha
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin 
