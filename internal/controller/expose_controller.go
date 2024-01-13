@@ -28,6 +28,7 @@ import (
 	// "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/roopeshsn/expose-k8s-operator/api/v1alpha1"
@@ -69,6 +70,39 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	port := expose.Spec.Service[0].Port
 	ingressName := expose.Spec.Ingress[0].Name
 
+	finalizerName := "api.core.expose-k8s-operator.io/finalizer"
+
+	if expose.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !controllerutil.ContainsFinalizer(expose, finalizerName) {
+			controllerutil.AddFinalizer(expose, finalizerName)
+			if err := r.Update(ctx, expose); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(expose, finalizerName) {
+			// our finalizer is present, so lets handle any external dependency
+			if err := r.deleteResources(ctx, expose, deploymentName, serviceName, ingressName); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(expose, finalizerName)
+			if err := r.Update(ctx, expose); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+
 	// Print deployment and container information
 	fmt.Printf("Deployment: %s, Replicas: %d \n", deploymentName, replicas)
 	for _, container := range containers {
@@ -76,96 +110,106 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Create deployment
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentName,
-			Namespace: expose.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(replicas),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": component,
-				},
+	existingDeployment := &appsv1.Deployment{}
+	deployment := &appsv1.Deployment{}
+	err = r.Get(ctx, client.ObjectKey{Namespace: expose.Namespace, Name: deploymentName}, existingDeployment)
+	if err != nil {
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deploymentName,
+				Namespace: expose.Namespace,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(replicas),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
 						"app": component,
 					},
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  containers[0].Name,
-							Image: containers[0].Image,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": component,
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  containers[0].Name,
+								Image: containers[0].Image,
+							},
 						},
 					},
 				},
 			},
-		},
+		}
+		fmt.Println("Creating deployment...")
+		err = r.Create(ctx, deployment)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		fmt.Printf("Created deployment %s \n", deployment.Name)
+	} else {
+		fmt.Printf("Deployment %s already exists \n", deploymentName)
 	}
-	fmt.Println("Creating deployment...")
-	err = r.Create(ctx, deployment)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	fmt.Printf("Created deployment %s \n", deployment.Name)
-
-	// To get deployment labels
-	// createdDeployment := &appsv1.Deployment{}
-	// err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: expose.Namespace}, createdDeployment)
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
 
 	// Create Service
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceName,
-			Namespace: expose.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: getDeploymentLabels(*deployment),
-			Ports: []corev1.ServicePort{
-				{
-					Name: "http",
-					Port: port,
+	existingService := &corev1.Service{}
+	err = r.Get(ctx, client.ObjectKey{Namespace: expose.Namespace, Name: serviceName}, existingService)
+	if err != nil {
+		service := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      serviceName,
+				Namespace: expose.Namespace,
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: getDeploymentLabels(*deployment),
+				Ports: []corev1.ServicePort{
+					{
+						Name: "http",
+						Port: port,
+					},
 				},
 			},
-		},
+		}
+		fmt.Println("Creating service...")
+		err = r.Create(ctx, service)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		fmt.Printf("Created service %s \n", service.Name)
+	} else {
+		fmt.Printf("Service %s already exists \n", serviceName)
 	}
-	fmt.Println("Creating service...")
-	err = r.Create(ctx, service)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	fmt.Printf("Created service %s \n", service.Name)
 
 	// Create Ingress
 	pathType := "Prefix"
-	ingress := &netwv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ingressName,
-			Namespace: expose.Namespace,
-			Annotations: map[string]string{
-				"nginx.ingress.kubernetes.io/app-root": "/",
+	existingIngress := &netwv1.Ingress{}
+	err = r.Get(ctx, client.ObjectKey{Namespace: expose.Namespace, Name: ingressName}, existingIngress)
+	if err != nil {
+		ingress := &netwv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ingressName,
+				Namespace: expose.Namespace,
+				Annotations: map[string]string{
+					"nginx.ingress.kubernetes.io/app-root": "/",
+				},
 			},
-		},
-		Spec: netwv1.IngressSpec{
-			Rules: []netwv1.IngressRule{
-				netwv1.IngressRule{
-					IngressRuleValue: netwv1.IngressRuleValue{
-						HTTP: &netwv1.HTTPIngressRuleValue{
-							Paths: []netwv1.HTTPIngressPath{
-								netwv1.HTTPIngressPath{
-									Path:     "/nginx",
-									PathType: (*netwv1.PathType)(&pathType),
-									Backend: netwv1.IngressBackend{
-										Service: &netwv1.IngressServiceBackend{
-											Name: service.Name,
-											Port: netwv1.ServiceBackendPort{
-												Number: port,
+			Spec: netwv1.IngressSpec{
+				Rules: []netwv1.IngressRule{
+					netwv1.IngressRule{
+						IngressRuleValue: netwv1.IngressRuleValue{
+							HTTP: &netwv1.HTTPIngressRuleValue{
+								Paths: []netwv1.HTTPIngressPath{
+									netwv1.HTTPIngressPath{
+										Path:     "/nginx",
+										PathType: (*netwv1.PathType)(&pathType),
+										Backend: netwv1.IngressBackend{
+											Service: &netwv1.IngressServiceBackend{
+												Name: serviceName,
+												Port: netwv1.ServiceBackendPort{
+													Number: port,
+												},
 											},
 										},
 									},
@@ -175,14 +219,16 @@ func (r *ExposeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					},
 				},
 			},
-		},
+		}
+		fmt.Println("Creating ingress...")
+		err = r.Create(ctx, ingress)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		fmt.Printf("Created ingress %s \n", ingress.Name)
+	} else {
+		fmt.Printf("Ingress %s already exists \n", ingressName)
 	}
-	fmt.Println("Creating ingress...")
-	err = r.Create(ctx, ingress)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	fmt.Printf("Created ingress %s \n", ingress.Name)
 
 	return ctrl.Result{}, nil
 
@@ -203,4 +249,55 @@ func int32Ptr(i int32) *int32 {
 
 func getDeploymentLabels(deployment appsv1.Deployment) map[string]string {
 	return deployment.Spec.Template.Labels
+}
+
+func (r *ExposeReconciler) deleteResources(ctx context.Context, expose *apiv1alpha1.Expose, deploymentName string, serviceName string, ingressName string) error {
+	//
+	// delete any external resources associated with the cronJob
+	//
+	// Ensure that delete implementation is idempotent and safe to invoke
+	// multiple times for same object.
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName,
+			Namespace: expose.Namespace,
+		},
+	}
+	fmt.Println("Deleting deployment...")
+	if err := r.Delete(ctx, deployment); err != nil {
+		fmt.Printf("Error in deleting a deployment %s \n", deployment.Name)
+		return nil
+	}
+	fmt.Printf("Deleted deployment %s \n", deployment.Name)
+
+	// Delete Service
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: expose.Namespace,
+		},
+	}
+	fmt.Println("Deleting service...")
+	if err := r.Delete(ctx, service); err != nil {
+		fmt.Printf("Error in deleting a service %s \n", service.Name)
+		return nil
+	}
+	fmt.Printf("Deleted service %s \n", service.Name)
+
+	// Delete Ingress
+	ingress := &netwv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ingressName,
+			Namespace: expose.Namespace,
+		},
+	}
+	fmt.Println("Deleting ingress...")
+	if err := r.Delete(ctx, ingress); err != nil {
+		fmt.Printf("Error in deleting a ingress %s \n", ingress.Name)
+		return nil
+	}
+	fmt.Printf("Deleted ingress %s \n", ingress.Name)
+
+	return nil
 }
